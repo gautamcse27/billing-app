@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState } from "react";
 import RajaInvoice from "./RajaInvoice";
 
 // --- helper: convert number to Indian rupees in words (simple) ---
@@ -93,8 +93,8 @@ function App() {
 
   // -------- FORM STATE --------
   const [meta, setMeta] = useState({
-    invoiceNo: "", // you type manually
-    date: todayStr, // auto today
+    invoiceNo: "",          // you type manually
+    date: todayStr,         // auto today
 
     // CUSTOMER + TRANSPORT DETAILS – you type manually
     customerName: "",
@@ -103,7 +103,7 @@ function App() {
     stateCode: "",
     workOrderNo: "",
 
-    // TAX – pre-filled as per your data (you can still change)
+    // TAX – pre-filled (can edit)
     cgstRate: "9",
     sgstRate: "9",
     igstRate: "18",
@@ -115,33 +115,28 @@ function App() {
     bankDetails:
       "Bank of India, Jamal Road, Patna, A/C No. 44152010000578, IFSC - BKID0004415",
 
-    // HEADER / BOTTOM company details – pre-filled for Raja Generator
-    companyName: "Raja Generator",
+    // HEADER / BOTTOM company details – pre-filled for Raju Generator
+    companyName: "Raju Generator",
     companyGstin: "10AMXPP3961C1Z3",
     companyContact: "9308054050",
     companyDealsIn: "Generator Service, Repairing, Maintenance and Hire work.",
     companyAddress: "Exhibition Road, Raja Market, Patna - 800 001",
-    signatoryName: "Rakesh Chaudhary",
+    signatoryName: "Pappu Bhardwaj",
   });
 
-  // ITEMS – one row, description blank, rest prefilled (you can edit)
-  // taxType: "CGST_SGST" | "IGST"
+  // ITEMS – one row to start
   const [items, setItems] = useState([
     {
       description: "",
       hsn: "997319",
       qty: "1",
       rate: "40000",
-      taxType: "CGST_SGST",
     },
   ]);
 
   const [invoiceList, setInvoiceList] = useState([]);
   const [currentId, setCurrentId] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  // ref for printing only the invoice
-  const printRef = useRef(null);
 
   // -------- HANDLERS ----------
   const handleMetaChange = (e) => {
@@ -160,13 +155,7 @@ function App() {
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      {
-        description: "",
-        hsn: "997319",
-        qty: "1",
-        rate: "40000",
-        taxType: "CGST_SGST",
-      },
+      { description: "", hsn: "997319", qty: "1", rate: "40000" },
     ]);
   };
 
@@ -174,63 +163,42 @@ function App() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // -------- CALCULATIONS (per-item taxType) --------
+  // -------- CALCULATIONS --------
   const computed = useMemo(() => {
-    const cgstRateNum = Number(meta.cgstRate || 0);
-    const sgstRateNum = Number(meta.sgstRate || 0);
-    const igstRateNum = Number(meta.igstRate || 0);
-
-    let taxableAmount = 0;
-    let totalCgst = 0;
-    let totalSgst = 0;
-    let totalIgst = 0;
-
     const normalizedItems = items.map((it) => {
       const qty = Number(it.qty || 0);
       const rate = Number(it.rate || 0);
-      const amount = qty * rate;
-      const taxType = it.taxType || "CGST_SGST";
-
-      let cgstAmtItem = 0;
-      let sgstAmtItem = 0;
-      let igstAmtItem = 0;
-
-      if (amount > 0) {
-        if (taxType === "IGST") {
-          igstAmtItem = (amount * igstRateNum) / 100;
-        } else {
-          cgstAmtItem = (amount * cgstRateNum) / 100;
-          sgstAmtItem = (amount * sgstRateNum) / 100;
-        }
-      }
-
-      taxableAmount += amount;
-      totalCgst += cgstAmtItem;
-      totalSgst += sgstAmtItem;
-      totalIgst += igstAmtItem;
-
       return {
         ...it,
         qty,
         rate,
-        amount,
-        taxType,
-        cgstAmtItem,
-        sgstAmtItem,
-        igstAmtItem,
+        amount: qty * rate,
       };
     });
 
-    const totalGst = totalCgst + totalSgst + totalIgst;
+    const taxableAmount = normalizedItems.reduce(
+      (sum, it) => sum + it.amount,
+      0
+    );
+
+    const cgstRateNum = Number(meta.cgstRate || 0);
+    const sgstRateNum = Number(meta.sgstRate || 0);
+    const igstRateNum = Number(meta.igstRate || 0);
+
+    const cgstAmount = (taxableAmount * cgstRateNum) / 100;
+    const sgstAmount = (taxableAmount * sgstRateNum) / 100;
+    const igstAmount = (taxableAmount * igstRateNum) / 100;
+    const totalGst = cgstAmount + sgstAmount + igstAmount;
     const grandTotal = taxableAmount + totalGst;
+
     const amountInWords = numberToWordsIndian(Math.round(grandTotal));
 
     return {
       items: normalizedItems,
       taxableAmount,
-      cgstAmount: totalCgst,
-      sgstAmount: totalSgst,
-      igstAmount: totalIgst,
+      cgstAmount,
+      sgstAmount,
+      igstAmount,
       totalGst,
       grandTotal,
       amountInWords,
@@ -320,7 +288,6 @@ function App() {
       cgstRate: String(inv.cgst_rate ?? prev.cgstRate),
       sgstRate: String(inv.sgst_rate ?? prev.sgstRate),
       igstRate: String(inv.igst_rate ?? prev.igstRate),
-      // keep default note/bank/company if DB doesn't store them
     }));
 
     setItems(
@@ -329,123 +296,14 @@ function App() {
         hsn: it.hsn,
         qty: String(it.qty),
         rate: String(it.rate),
-        taxType: "CGST_SGST", // default for old invoices
       }))
     );
   };
 
-  // -------- PRINT ONLY THE INVOICE (full-page PDF) --------
+  // -------- SIMPLE PRINT: use @media print from index.css --------
   const handlePrint = () => {
-    if (!printRef.current) return;
-  
-    const invoiceHtml = printRef.current.innerHTML;
-    const printWindow = window.open("", "_blank", "width=900,height=650");
-    if (!printWindow) return;
-  
-    printWindow.document.open();
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Invoice ${invoice.invoiceNo || ""}</title>
-          <style>
-  
-            /* FORCE EXACT BORDER PRINT */
-            @page { size: A4; margin: 6mm; }
-            body {
-              margin: 0;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-              font-family: "Times New Roman", serif;
-            }
-  
-            .invoice-page {
-              padding: 0;
-              margin: 0;
-            }
-  
-            .invoice-wrapper {
-              width: 190mm;
-              background: #fffde2;
-              border: 1px solid #000 !important;
-              padding: 12px 16px;
-              box-sizing: border-box;
-            }
-  
-            /* TABLE BORDERS */
-            table, th, td {
-              border: 1px solid #000 !important;
-              border-collapse: collapse !important;
-            }
-  
-            th, td {
-              padding: 3px 4px;
-            }
-  
-            /* Restore layout classes */
-            .inv-tax-row {
-              display: flex;
-              width: 100%;
-            }
-  
-            .inv-tax-left {
-              width: 60%;
-              border: 1px solid #000 !important;
-              min-height: 60px;
-            }
-  
-            .inv-tax-right {
-              width: 40%;
-              border: 1px solid #000 !important;
-              border-left: none !important;
-            }
-  
-            .inv-tax-line {
-              display: flex;
-              justify-content: space-between;
-              border-bottom: 1px solid #000;
-              padding: 3px 5px;
-            }
-  
-            .inv-amount-words {
-              border: 1px solid #000;
-              border-top: none;
-              padding: 5px;
-            }
-  
-            .inv-bottom-row {
-              display: flex;
-            }
-  
-            .inv-bottom-left {
-              width: 70%;
-              border: 1px solid #000;
-              padding: 5px;
-            }
-  
-            .inv-bottom-right {
-              width: 30%;
-              border: 1px solid #000;
-              border-left: none;
-              padding: 5px;
-              text-align: right;
-            }
-          </style>
-        </head>
-  
-        <body>
-          <div class="invoice-page">
-            <div class="invoice-wrapper">
-              ${invoiceHtml}
-            </div>
-          </div>
-        </body>
-      </html>
-    `);
-  
-    printWindow.document.close();
-    printWindow.print();
+    window.print();
   };
-  
 
   // -------- RENDER --------
   return (
@@ -597,23 +455,8 @@ function App() {
                 }
               />
             </label>
-
-            {/* New: per-item tax type */}
-            <label>
-              Tax Type:
-              <select
-                value={it.taxType || "CGST_SGST"}
-                onChange={(e) =>
-                  handleItemChange(idx, "taxType", e.target.value)
-                }
-              >
-                <option value="CGST_SGST">CGST + SGST</option>
-                <option value="IGST">IGST only</option>
-              </select>
-            </label>
-
             <div>
-              Amount (Taxable):{" "}
+              Amount:{" "}
               {(
                 (Number(it.qty || 0) * Number(it.rate || 0)) ||
                 0
@@ -756,9 +599,7 @@ function App() {
 
       {/* RIGHT: INVOICE PREVIEW (this is what prints) */}
       <div className="preview-pane">
-        <div ref={printRef}>
-          <RajaInvoice invoice={invoice} />
-        </div>
+        <RajaInvoice invoice={invoice} />
       </div>
     </div>
   );
