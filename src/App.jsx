@@ -93,29 +93,25 @@ function App() {
 
   // -------- FORM STATE --------
   const [meta, setMeta] = useState({
-    invoiceNo: "",          // you type manually
-    date: todayStr,         // auto today
+    invoiceNo: "",
+    date: todayStr,
 
-    // CUSTOMER + TRANSPORT DETAILS – you type manually
     customerName: "",
     customerAddress: "",
     customerGstin: "",
     stateCode: "",
     workOrderNo: "",
 
-    // TAX – pre-filled (can edit)
     cgstRate: "9",
     sgstRate: "9",
     igstRate: "18",
 
-    // BOTTOM – pre-filled Note & Bank details
     note1: "Goods once sold will not be taken back.",
     note2:
       "All the disputes arising out of this invoice settled in Patna Jurisdiction.",
     bankDetails:
       "Bank of India, Jamal Road, Patna, A/C No. 44152010000578, IFSC - BKID0004415",
 
-    // HEADER / BOTTOM company details – pre-filled for Raju Generator
     companyName: "Raju Generator",
     companyGstin: "10AMXPP3961C1Z3",
     companyContact: "9308054050",
@@ -124,13 +120,16 @@ function App() {
     signatoryName: "Pappu Bhardwaj",
   });
 
-  // ITEMS – one row to start
+  // ITEMS – now with per-item taxType
+  // taxType: "CGST_SGST" or "IGST"
   const [items, setItems] = useState([
     {
       description: "",
       hsn: "997319",
       qty: "1",
       rate: "40000",
+      taxType: "CGST_SGST",
+      unit: "Nos.",
     },
   ]);
 
@@ -155,7 +154,14 @@ function App() {
   const addItem = () => {
     setItems((prev) => [
       ...prev,
-      { description: "", hsn: "997319", qty: "1", rate: "40000" },
+      {
+        description: "",
+        hsn: "997319",
+        qty: "1",
+        rate: "40000",
+        taxType: "CGST_SGST",
+        unit: "Nos.", 
+      },
     ]);
   };
 
@@ -163,42 +169,63 @@ function App() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // -------- CALCULATIONS --------
+  // -------- CALCULATIONS (per-item CGST+SGST / IGST) --------
   const computed = useMemo(() => {
-    const normalizedItems = items.map((it) => {
-      const qty = Number(it.qty || 0);
-      const rate = Number(it.rate || 0);
-      return {
-        ...it,
-        qty,
-        rate,
-        amount: qty * rate,
-      };
-    });
-
-    const taxableAmount = normalizedItems.reduce(
-      (sum, it) => sum + it.amount,
-      0
-    );
-
     const cgstRateNum = Number(meta.cgstRate || 0);
     const sgstRateNum = Number(meta.sgstRate || 0);
     const igstRateNum = Number(meta.igstRate || 0);
 
-    const cgstAmount = (taxableAmount * cgstRateNum) / 100;
-    const sgstAmount = (taxableAmount * sgstRateNum) / 100;
-    const igstAmount = (taxableAmount * igstRateNum) / 100;
-    const totalGst = cgstAmount + sgstAmount + igstAmount;
-    const grandTotal = taxableAmount + totalGst;
+    let taxableAmount = 0;
+    let totalCgst = 0;
+    let totalSgst = 0;
+    let totalIgst = 0;
 
+    const normalizedItems = items.map((it) => {
+      const qty = Number(it.qty || 0);
+      const rate = Number(it.rate || 0);
+      const amount = qty * rate;
+      const taxType = it.taxType || "CGST_SGST";
+
+      let cgstAmtItem = 0;
+      let sgstAmtItem = 0;
+      let igstAmtItem = 0;
+
+      if (amount > 0) {
+        if (taxType === "IGST") {
+          igstAmtItem = (amount * igstRateNum) / 100;
+        } else {
+          cgstAmtItem = (amount * cgstRateNum) / 100;
+          sgstAmtItem = (amount * sgstRateNum) / 100;
+        }
+      }
+
+      taxableAmount += amount;
+      totalCgst += cgstAmtItem;
+      totalSgst += sgstAmtItem;
+      totalIgst += igstAmtItem;
+
+      return {
+        ...it,
+        qty,
+        rate,
+        amount,
+        taxType,
+        cgstAmtItem,
+        sgstAmtItem,
+        igstAmtItem,
+      };
+    });
+
+    const totalGst = totalCgst + totalSgst + totalIgst;
+    const grandTotal = taxableAmount + totalGst;
     const amountInWords = numberToWordsIndian(Math.round(grandTotal));
 
     return {
       items: normalizedItems,
       taxableAmount,
-      cgstAmount,
-      sgstAmount,
-      igstAmount,
+      cgstAmount: totalCgst,
+      sgstAmount: totalSgst,
+      igstAmount: totalIgst,
       totalGst,
       grandTotal,
       amountInWords,
@@ -217,7 +244,7 @@ function App() {
     customerGstin: meta.customerGstin,
     stateCode: meta.stateCode,
     workOrderNo: meta.workOrderNo,
-    items: computed.items,
+    items: computed.items, // includes per-item taxType and amounts (if you later want to show)
     taxableAmount: computed.taxableAmount,
     cgstRate: computed.cgstRateNum,
     sgstRate: computed.sgstRateNum,
@@ -290,17 +317,20 @@ function App() {
       igstRate: String(inv.igst_rate ?? prev.igstRate),
     }));
 
+    // old saved items don’t store taxType, default them to CGST+SGST
     setItems(
       its.map((it) => ({
         description: it.description,
         hsn: it.hsn,
         qty: String(it.qty),
         rate: String(it.rate),
+        taxType: "CGST_SGST",
+        unit: it.unit || "Nos.", 
       }))
     );
   };
 
-  // -------- SIMPLE PRINT: use @media print from index.css --------
+  // -------- PRINT (uses @media print from index.css) --------
   const handlePrint = () => {
     window.print();
   };
@@ -446,6 +476,14 @@ function App() {
               />
             </label>
             <label>
+              Unit:
+             <input
+              value={it.unit || ""}
+              onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
+             />
+            </label>
+
+            <label>
               Rate:
               <input
                 type="number"
@@ -455,8 +493,23 @@ function App() {
                 }
               />
             </label>
+
+            {/* NEW: per item tax type */}
+            <label>
+              Tax Type:
+              <select
+                value={it.taxType || "CGST_SGST"}
+                onChange={(e) =>
+                  handleItemChange(idx, "taxType", e.target.value)
+                }
+              >
+                <option value="CGST_SGST">CGST + SGST</option>
+                <option value="IGST">IGST only</option>
+              </select>
+            </label>
+
             <div>
-              Amount:{" "}
+              Amount (Taxable):{" "}
               {(
                 (Number(it.qty || 0) * Number(it.rate || 0)) ||
                 0

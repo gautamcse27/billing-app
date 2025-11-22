@@ -44,8 +44,7 @@ const RajaInvoice = ({ invoice }) => {
 
         <div className="inv-meta-row">
           <div className="inv-meta-box">
-            Invoice No :{" "}
-            <span className="inv-meta-value">{invoiceNo}</span>
+            Invoice No : <span className="inv-meta-value">{invoiceNo}</span>
           </div>
           <div className="inv-meta-box inv-meta-right">
             Date : <span className="inv-meta-value">{date}</span>
@@ -57,8 +56,7 @@ const RajaInvoice = ({ invoice }) => {
           <div className="inv-cust-left">
             <div className="inv-box-title">Customer Details:</div>
             <div className="inv-field">
-              Name:{" "}
-              <span className="inv-field-value">{customerName}</span>
+              Name: <span className="inv-field-value">{customerName}</span>
             </div>
             <div className="inv-field">
               Address:{" "}
@@ -83,43 +81,55 @@ const RajaInvoice = ({ invoice }) => {
           </div>
         </div>
 
-        {/* ===== ITEMS TABLE (like screenshot) ===== */}
+        {/* ===== ITEMS TABLE ===== */}
         <table className="inv-items-table">
           <thead>
             <tr>
               <th style={{ width: "5%" }}>Sl. No.</th>
-              <th style={{ width: "45%" }}>DESCRIPTION OF SUPPLY</th>
-              <th style={{ width: "10%" }}>HSN / SAC</th>
-              <th style={{ width: "8%" }}>QTY.</th>
-              <th style={{ width: "14%" }}>RATE / ITEM (₹)</th>
-              <th style={{ width: "14%" }}>TAXABLE VALUE (₹)</th>
+              <th style={{ width: "38%" }}>DESCRIPTION OF SUPPLY</th>
+              <th style={{ width: "9%" }}>HSN / SAC</th>
+              <th style={{ width: "7%" }}>QTY.</th>
+              <th style={{ width: "7%" }}>UNIT</th>
+              <th style={{ width: "12%" }}>RATE / ITEM (₹)</th>
+              <th style={{ width: "7%" }}>TAX %</th>
+              <th style={{ width: "15%" }}>TAXABLE VALUE (₹)</th>
             </tr>
           </thead>
           <tbody>
-            {items.map((it, idx) => (
-              <tr key={idx}>
-                <td className="align-center">{idx + 1}</td>
-                <td>{it.description}</td>
-                <td className="align-center">{it.hsn}</td>
-                <td className="align-center">{it.qty}</td>
-                <td className="align-right">
-                  {Number(it.rate || 0).toLocaleString("en-IN")}
-                </td>
-                <td className="align-right">
-                  {Number(it.amount || 0).toLocaleString("en-IN")}
-                </td>
-              </tr>
-            ))}
+            {items.map((it, idx) => {
+              const taxType = it.taxType || "CGST_SGST";
+              const effectiveRate =
+                taxType === "IGST"
+                  ? igstRate
+                  : (cgstRate || 0) + (sgstRate || 0); // total % for CGST+SGST
 
-            {/* row for Total Taxable Value exactly as screenshot */}
+              return (
+                <tr key={idx}>
+                  <td className="align-center">{idx + 1}</td>
+                  <td>{it.description}</td>
+                  <td className="align-center">{it.hsn}</td>
+                  <td className="align-center">{it.qty}</td>
+                  <td className="align-center">{it.unit || ""}</td>
+                  <td className="align-right">
+                    {Number(it.rate || 0).toLocaleString("en-IN")}
+                  </td>
+                  <td className="align-center">
+                    {effectiveRate ? `${effectiveRate}%` : ""}
+                  </td>
+                  <td className="align-right">
+                    {Number(it.amount || 0).toLocaleString("en-IN")}
+                  </td>
+                </tr>
+              );
+            })}
+
+            {/* Total taxable value row */}
             <tr className="inv-items-total-row">
-              <td colSpan={5} className="align-right">
+              <td colSpan={7} className="align-right">
                 <strong>Total Taxable Value</strong>
               </td>
               <td className="align-right">
-                <strong>
-                  {taxableAmount.toLocaleString("en-IN")}
-                </strong>
+                <strong>{taxableAmount.toLocaleString("en-IN")}</strong>
               </td>
             </tr>
           </tbody>
@@ -167,8 +177,7 @@ const RajaInvoice = ({ invoice }) => {
 
         {/* ===== AMOUNT IN WORDS ===== */}
         <div className="inv-amount-words">
-          Rupees:{" "}
-          <span className="inv-field-value">{amountInWords}</span>
+          Rupees: <span>{amountInWords}</span>
         </div>
 
         {/* ===== NOTE + BANK + SIGNATURE ===== */}
@@ -184,7 +193,7 @@ const RajaInvoice = ({ invoice }) => {
             <div className="inv-box-title" style={{ marginTop: "4px" }}>
               Bank Details :
             </div>
-            <div className="inv-field-value">{bankDetails}</div>
+            <div>{bankDetails}</div>
           </div>
 
           <div className="inv-bottom-right">

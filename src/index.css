@@ -186,7 +186,7 @@ button:hover {
 }
 
 .inv-field-value {
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 /* ------------------------------------------------------------------
@@ -310,55 +310,83 @@ button:hover {
 .inv-sign-caption {
   font-size: 11px;
 }
-
 /* ------------------------------------------------------------------
-   PRINT MODE — PERFECT A4 PDF OUTPUT
+   PRINT MODE — allow invoice to flow over multiple A4 pages
 ------------------------------------------------------------------ */
-
 @media print {
+  /* hide left + middle panes; only show preview (invoice) */
   .no-print {
     display: none !important;
   }
 
+  html,
   body {
     margin: 0;
+    padding: 0;
+    height: auto;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
 
+  #root {
+    height: auto;
+  }
+
   .app-layout {
     display: block !important;
-    height: auto !important;
+    height: auto !important;   /* important: no 100vh in print */
   }
 
   .preview-pane {
+    width: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
     overflow: visible !important;
+    background: none !important;
   }
 
   .invoice-page {
     padding: 0 !important;
+    margin: 0 !important;
     background: none !important;
   }
 
+  /* MAIN INVOICE BOX
+     No transform, no forced height, no page-break-after.
+     Browser can now break this over multiple pages.
+  */
   .invoice-wrapper {
-    width: 190mm !important;
-    margin: 0 auto !important;
+    width: 190mm;                /* fit inside A4 width */
+    margin: 0 auto;
     box-shadow: none !important;
     background: #fffde2 !important;
     border: 1px solid #000 !important;
-    page-break-after: always;
+    padding: 10px 12px;
   }
 
+  /* Make sure tables keep their borders when broken */
   table,
   th,
   td {
     border: 1px solid #000 !important;
     border-collapse: collapse !important;
   }
+
+  /* Avoid breaking in ugly places, but allow break across rows */
+  .inv-bottom-row,
+  .inv-tax-box,
+  .inv-amount-words {
+    page-break-inside: avoid;
+  }
+
+  /* rows can break naturally between each other */
+  tr {
+    page-break-inside: avoid;
+  }
 }
 
-/* Force printer to use A4 */
+/* A4 with normal margins */
 @page {
   size: A4;
-  margin: 8mm;
+  margin: 10mm;
 }
