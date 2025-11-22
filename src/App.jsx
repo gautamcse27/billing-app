@@ -1,3 +1,4 @@
+// src/App.jsx
 import { useEffect, useMemo, useState } from "react";
 import RajaInvoice from "./RajaInvoice";
 import { exportInvoicePdf } from "./invoicePdf";
@@ -87,10 +88,6 @@ function numberToWordsIndian(num) {
 }
 
 function App() {
-  const handleExportPdf = () => {
-    exportInvoicePdf(invoice);
-  };
-  
   // today's date in dd-mm-yyyy
   const todayStr = new Date()
     .toLocaleDateString("en-GB") // dd/mm/yyyy
@@ -125,8 +122,7 @@ function App() {
     signatoryName: "Pappu Bhardwaj",
   });
 
-  // ITEMS – now with per-item taxType
-  // taxType: "CGST_SGST" or "IGST"
+  // ITEMS – with per-item taxType and unit
   const [items, setItems] = useState([
     {
       description: "",
@@ -143,6 +139,7 @@ function App() {
   const [saving, setSaving] = useState(false);
 
   // -------- HANDLERS ----------
+
   const handleMetaChange = (e) => {
     const { name, value } = e.target;
     setMeta((prev) => ({ ...prev, [name]: value }));
@@ -165,7 +162,7 @@ function App() {
         qty: "1",
         rate: "40000",
         taxType: "CGST_SGST",
-        unit: "Nos.", 
+        unit: "Nos.",
       },
     ]);
   };
@@ -240,7 +237,7 @@ function App() {
     };
   }, [items, meta.cgstRate, meta.sgstRate, meta.igstRate]);
 
-  // Build invoice object for RajaInvoice + saving
+  // -------- Build invoice object for preview + saving + PDF --------
   const invoice = {
     invoiceNo: meta.invoiceNo,
     date: meta.date,
@@ -249,7 +246,7 @@ function App() {
     customerGstin: meta.customerGstin,
     stateCode: meta.stateCode,
     workOrderNo: meta.workOrderNo,
-    items: computed.items, // includes per-item taxType and amounts (if you later want to show)
+    items: computed.items,
     taxableAmount: computed.taxableAmount,
     cgstRate: computed.cgstRateNum,
     sgstRate: computed.sgstRateNum,
@@ -271,6 +268,19 @@ function App() {
       signatoryName: meta.signatoryName,
     },
   };
+
+  // Export PDF (multi-page, pad style)
+ // after const invoice = { ... };
+
+const handleExportPdf = () => {
+  try {
+    exportInvoicePdf(invoice);
+  } catch (err) {
+    console.error("PDF export failed", err);
+    alert("PDF export failed: " + err.message);
+  }
+};
+
 
   // -------- DB OPERATIONS via IPC --------
   const refreshList = async () => {
@@ -322,7 +332,7 @@ function App() {
       igstRate: String(inv.igst_rate ?? prev.igstRate),
     }));
 
-    // old saved items don’t store taxType, default them to CGST+SGST
+    // old saved items don’t store taxType/unit, default them
     setItems(
       its.map((it) => ({
         description: it.description,
@@ -330,14 +340,9 @@ function App() {
         qty: String(it.qty),
         rate: String(it.rate),
         taxType: "CGST_SGST",
-        unit: it.unit || "Nos.", 
+        unit: it.unit || "Nos.",
       }))
     );
-  };
-
-  // -------- PRINT (uses @media print from index.css) --------
-  const handlePrint = () => {
-    window.print();
   };
 
   // -------- RENDER --------
@@ -482,12 +487,11 @@ function App() {
             </label>
             <label>
               Unit:
-             <input
-              value={it.unit || ""}
-              onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
-             />
+              <input
+                value={it.unit || ""}
+                onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
+              />
             </label>
-
             <label>
               Rate:
               <input
@@ -499,7 +503,6 @@ function App() {
               />
             </label>
 
-            {/* NEW: per item tax type */}
             <label>
               Tax Type:
               <select
@@ -655,7 +658,7 @@ function App() {
         </div>
       </div>
 
-      {/* RIGHT: INVOICE PREVIEW (this is what prints) */}
+      {/* RIGHT: INVOICE PREVIEW */}
       <div className="preview-pane">
         <RajaInvoice invoice={invoice} />
       </div>

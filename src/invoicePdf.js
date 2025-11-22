@@ -1,28 +1,19 @@
 // src/invoicePdf.js
 import jsPDF from "jspdf";
-import "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 
 /**
- * Generate multi-page A4 PDF for invoice with pad-like layout.
- * It uses invoice data coming from App.jsx.
+ * Generate A4 multi-page PDF for the invoice and open it in a new window.
  */
 export function exportInvoicePdf(invoice) {
+  console.log("Exporting invoice PDF", invoice);
+
   const doc = new jsPDF("p", "mm", "a4");
+
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-
   const marginLeft = 10;
-  const marginTop = 8;
   const marginRight = 10;
-
-  // We’ll keep some space reserved for bottom block (tax + notes + signature)
-  const bottomReserve = 70; // mm
-
-  const outerLeft = marginLeft;
-  const outerTop = marginTop;
-  const outerWidth = pageWidth - marginLeft - marginRight;
-
-  let currentY = outerTop + 4; // start inside outer border
+  const contentWidth = pageWidth - marginLeft - marginRight;
 
   const {
     invoiceNo,
@@ -48,141 +39,89 @@ export function exportInvoicePdf(invoice) {
     company,
   } = invoice;
 
-  // ---------- helpers ----------
-  const drawHeader = () => {
-    // outer border for whole page
-    doc.setDrawColor(0);
-    doc.rect(outerLeft, outerTop, outerWidth, pageHeight - marginTop * 2);
+  // ---------- HEADER ----------
+  let y = 12;
 
-    doc.setFont("times", "normal");
-    doc.setFontSize(10);
+  doc.setFont("times", "normal");
+  doc.setFontSize(10);
+  doc.text(`GST IN : ${company.gstin || ""}`, marginLeft, y);
 
-    // top line: GSTIN, TAX INVOICE, Contact
-    doc.text(`GST IN : ${company.gstin || ""}`, outerLeft + 2, currentY);
+  doc.setFont("times", "bold");
+  doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
 
-    const title = "TAX INVOICE";
-    const titleWidth = doc.getTextWidth(title);
-    doc.setFont("times", "bold");
-    doc.text(
-      title,
-      outerLeft + outerWidth / 2 - titleWidth / 2,
-      currentY
-    );
+  doc.setFont("times", "normal");
+  const contactStr = `Contact No.: ${company.contact || ""}`;
+  const contactWidth = doc.getTextWidth(contactStr);
+  doc.text(contactStr, pageWidth - marginRight - contactWidth, y);
 
-    doc.setFont("times", "normal");
-    const contactStr = `Contact No.: ${company.contact || ""}`;
-    const contactWidth = doc.getTextWidth(contactStr);
-    doc.text(
-      contactStr,
-      outerLeft + outerWidth - contactWidth - 2,
-      currentY
-    );
+  y += 8;
 
-    currentY += 7;
+  doc.setFont("times", "bold");
+  doc.setFontSize(18);
+  doc.text(company.name || "", pageWidth / 2, y, { align: "center" });
 
-    // firm name
-    doc.setFont("times", "bold");
-    doc.setFontSize(18);
-    const firmName = company.name || "";
-    const firmWidth = doc.getTextWidth(firmName);
-    doc.text(
-      firmName,
-      outerLeft + outerWidth / 2 - firmWidth / 2,
-      currentY
-    );
+  y += 6;
+  doc.setFontSize(10);
+  doc.setFont("times", "normal");
+  doc.text(
+    `Deals in : ${company.dealsIn || ""}`,
+    pageWidth / 2,
+    y,
+    { align: "center" }
+  );
 
-    currentY += 6;
+  y += 5;
+  doc.text(
+    company.address || "",
+    pageWidth / 2,
+    y,
+    { align: "center" }
+  );
 
-    // deals in
-    doc.setFontSize(10);
-    doc.setFont("times", "normal");
-    const dealsIn = `Deals in : ${company.dealsIn || ""}`;
-    const dealsWidth = doc.getTextWidth(dealsIn);
-    doc.text(
-      dealsIn,
-      outerLeft + outerWidth / 2 - dealsWidth / 2,
-      currentY
-    );
+  y += 7;
 
-    currentY += 5;
+  // Invoice No / Date line
+  doc.setFont("times", "normal");
+  doc.text(`Invoice No : ${invoiceNo || ""}`, marginLeft, y);
+  doc.text(
+    `Date : ${date || ""}`,
+    pageWidth - marginRight,
+    y,
+    { align: "right" }
+  );
 
-    const addr = company.address || "";
-    const addrWidth = doc.getTextWidth(addr);
-    doc.text(
-      addr,
-      outerLeft + outerWidth / 2 - addrWidth / 2,
-      currentY
-    );
+  y += 5;
 
-    currentY += 6;
+  // ---------- CUSTOMER / TRANSPORT BLOCK ----------
+  const blockHeight = 25;
+  const midX = marginLeft + contentWidth * 0.65;
 
-    // Invoice No / Date row
-    const rowHeight = 7;
-    doc.rect(outerLeft, currentY - rowHeight + 1, outerWidth, rowHeight);
-    const half = outerWidth / 2;
+  // outer rect
+  doc.rect(marginLeft, y, contentWidth, blockHeight);
+  // vertical split
+  doc.line(midX, y, midX, y + blockHeight);
 
-    doc.text(
-      `Invoice No : ${invoiceNo || ""}`,
-      outerLeft + 2,
-      currentY
-    );
-    doc.text(
-      `Date : ${date || ""}`,
-      outerLeft + half + 2,
-      currentY
-    );
+  doc.setFont("times", "bold");
+  doc.text("Customer Details:", marginLeft + 2, y + 5);
 
-    currentY += rowHeight + 1;
-  };
+  doc.setFont("times", "normal");
+  let lineY = y + 10;
+  doc.text(`Name: ${customerName || ""}`, marginLeft + 2, lineY);
+  lineY += 4;
+  doc.text(`Address: ${customerAddress || ""}`, marginLeft + 2, lineY);
+  lineY += 4;
+  doc.text(`GSTIN No.: ${customerGstin || ""}`, marginLeft + 2, lineY);
+  lineY += 4;
+  doc.text(`State Code: ${stateCode || ""}`, marginLeft + 2, lineY);
 
-  const drawCustomerTransport = () => {
-    const rowHeight = 28;
-    const half = outerWidth * 0.65; // approx as in pad: 65% / 35%
+  doc.setFont("times", "bold");
+  doc.text("Transporter Details:", midX + 2, y + 5);
+  doc.setFont("times", "normal");
+  doc.text(`Work Order No.: ${workOrderNo || ""}`, midX + 2, y + 10);
 
-    // big box
-    doc.rect(outerLeft, currentY, outerWidth, rowHeight);
+  y += blockHeight + 4;
 
-    // vertical split
-    doc.line(outerLeft + half, currentY, outerLeft + half, currentY + rowHeight);
-
-    // Customer block
-    doc.setFont("times", "bold");
-    doc.text("Customer Details:", outerLeft + 2, currentY + 5);
-    doc.setFont("times", "normal");
-
-    let lineY = currentY + 10;
-    doc.text(`Name: ${customerName || ""}`, outerLeft + 2, lineY);
-    lineY += 5;
-    doc.text(`Address: ${customerAddress || ""}`, outerLeft + 2, lineY);
-    lineY += 5;
-    doc.text(`GSTIN No.: ${customerGstin || ""}`, outerLeft + 2, lineY);
-    lineY += 5;
-    doc.text(`State Code: ${stateCode || ""}`, outerLeft + 2, lineY);
-
-    // Transport block
-    doc.setFont("times", "bold");
-    doc.text(
-      "Transporter Details:",
-      outerLeft + half + 2,
-      currentY + 5
-    );
-    doc.setFont("times", "normal");
-    doc.text(
-      `Work Order No.: ${workOrderNo || ""}`,
-      outerLeft + half + 2,
-      currentY + 10
-    );
-
-    currentY += rowHeight + 2;
-  };
-
-  // ---------- start first page ----------
-  drawHeader();
-  drawCustomerTransport();
-
-  // ---------- ITEMS TABLE (autoTable) ----------
-  const tableStartY = currentY;
-
+  // ---------- ITEMS TABLE ----------
   const head = [
     [
       "Sl. No.",
@@ -202,8 +141,8 @@ export function exportInvoicePdf(invoice) {
     const amount = qty * rate;
     const unit = it.unit || "";
     const taxType = it.taxType || "CGST_SGST";
-    let taxPercentStr = "";
 
+    let taxPercentStr = "";
     if (taxType === "IGST") {
       taxPercentStr = igstRate ? `${igstRate}%` : "";
     } else {
@@ -223,11 +162,10 @@ export function exportInvoicePdf(invoice) {
     ];
   });
 
-  doc.setFontSize(9);
-  doc.autoTable({
+  autoTable(doc, {
     head,
     body,
-    startY: tableStartY,
+    startY: y,
     theme: "grid",
     styles: {
       font: "times",
@@ -235,7 +173,7 @@ export function exportInvoicePdf(invoice) {
       cellPadding: 1.5,
     },
     headStyles: {
-      fillColor: [247, 243, 207], // light yellow header
+      fillColor: [247, 243, 207],
       textColor: 0,
       halign: "center",
     },
@@ -249,154 +187,133 @@ export function exportInvoicePdf(invoice) {
       6: { cellWidth: 14, halign: "center" },
       7: { cellWidth: 24, halign: "right" },
     },
-    didDrawPage: (data) => {
-      // On each page, ensure the outer border is drawn
-      if (data.pageNumber > 1) {
-        // reset currentY when new page starts
-        currentY = outerTop + 4;
-        drawHeader();
-        // move table down below header+customer on subsequent pages
-        data.settings.startY = currentY + 30;
-      }
-    },
   });
 
-  // where table ended
-  const tableEndY = doc.lastAutoTable.finalY;
+  let tableEndY = doc.lastAutoTable.finalY || y + 10;
+  let currentY = tableEndY + 6;
+  const pageHeight = doc.internal.pageSize.getHeight();
 
-  currentY = tableEndY + 4;
-
-  // Check if there is enough space for tax + bottom area, else new page
-  const neededForBottom = 60; // approx mm
-  if (currentY + neededForBottom > pageHeight - marginTop - 5) {
+  // If not enough space for tax + notes, add new page
+  const bottomNeeded = 70;
+  if (currentY + bottomNeeded > pageHeight - 10) {
     doc.addPage();
-    currentY = outerTop + 4;
-    drawHeader();
-    // small gap
-    currentY += 6;
+    currentY = 15;
   }
 
-  // ---------- Tax summary box ----------
-  const taxBoxX = outerLeft;
-  const taxBoxWidth = outerWidth;
+  // ---------- TAX SUMMARY ----------
   const lineH = 6;
-
-  doc.setFont("times", "normal");
-  doc.setFontSize(10);
-
-  // border of tax box
-  const taxLines = 6; // taxable + cgst + sgst + igst + total gst + grand total
+  const taxLines = 6;
   const taxBoxHeight = taxLines * lineH;
-  doc.rect(taxBoxX, currentY, taxBoxWidth, taxBoxHeight);
+  const taxX = marginLeft;
 
-  const drawTaxLine = (label, value, bold = false, offset) => {
-    const y = currentY + lineH * offset - 1;
-    if (bold) doc.setFont("times", "bold");
-    else doc.setFont("times", "normal");
-
-    doc.text(label, taxBoxX + 2, y);
-    const valStr = value
-      ? value.toLocaleString("en-IN", { maximumFractionDigits: 2 })
-      : "0";
-    const textWidth = doc.getTextWidth(valStr);
-    doc.text(
-      valStr,
-      taxBoxX + taxBoxWidth - textWidth - 2,
-      y
-    );
+  const drawTaxLine = (label, value, offset, bold = false) => {
+    const yPos = currentY + lineH * offset - 1;
+    doc.setFont("times", bold ? "bold" : "normal");
+    doc.text(label, taxX + 2, yPos);
+    const valStr = (value ?? 0).toLocaleString("en-IN", {
+      maximumFractionDigits: 2,
+    });
+    const w = doc.getTextWidth(valStr);
+    doc.text(valStr, marginLeft + contentWidth - w - 2, yPos);
   };
 
-  drawTaxLine("Taxable Amount", taxableAmount || 0, false, 1);
-  drawTaxLine(`ADD CGST @ ${cgstRate || 0}%`, cgstAmount || 0, false, 2);
-  drawTaxLine(`ADD SGST @ ${sgstRate || 0}%`, sgstAmount || 0, false, 3);
-  drawTaxLine(`ADD IGST @ ${igstRate || 0}%`, igstAmount || 0, false, 4);
-  drawTaxLine("Total GST", totalGst || 0, true, 5);
-  drawTaxLine("GRAND TOTAL", grandTotal || 0, true, 6);
+  // border
+  doc.rect(taxX, currentY, contentWidth, taxBoxHeight);
+
+  drawTaxLine("Taxable Amount", taxableAmount || 0, 1);
+  drawTaxLine(`ADD CGST @ ${cgstRate || 0}%`, cgstAmount || 0, 2);
+  drawTaxLine(`ADD SGST @ ${sgstRate || 0}%`, sgstAmount || 0, 3);
+  drawTaxLine(`ADD IGST @ ${igstRate || 0}%`, igstAmount || 0, 4);
+  drawTaxLine("Total GST", totalGst || 0, 5, true);
+  drawTaxLine("GRAND TOTAL", grandTotal || 0, 6, true);
 
   currentY += taxBoxHeight + 4;
 
-  // ---------- Amount in words ----------
-  const wordsHeight = 8;
-  doc.rect(taxBoxX, currentY, taxBoxWidth, wordsHeight);
+  // ---------- AMOUNT IN WORDS ----------
+  const wordsH = 8;
+  doc.rect(taxX, currentY, contentWidth, wordsH);
   doc.setFont("times", "normal");
   doc.text(
     `Rupees: ${amountInWords || ""}`,
-    taxBoxX + 2,
+    taxX + 2,
     currentY + 5
   );
 
-  currentY += wordsHeight + 4;
+  currentY += wordsH + 4;
 
-  // If not enough space for bottom note/signature, add new page
-  const bottomNeeded = 45;
-  if (currentY + bottomNeeded > pageHeight - marginTop - 5) {
+  // If bottom block won’t fit, new page
+  if (currentY + 40 > pageHeight - 10) {
     doc.addPage();
-    currentY = outerTop + 4;
-    drawHeader();
-    currentY += 6;
+    currentY = 15;
   }
 
-  // ---------- Bottom Note + Bank + Signature ----------
+  // ---------- BOTTOM: NOTE + BANK + SIGNATURE ----------
   const bottomHeight = 35;
-  const leftWidth = outerWidth * 0.7;
-  const rightWidth = outerWidth - leftWidth;
+  const leftWidth = contentWidth * 0.7;
+  const rightWidth = contentWidth - leftWidth;
 
-  // outer bottom row
-  doc.rect(outerLeft, currentY, outerWidth, bottomHeight);
-  // vertical dividing line
+  doc.rect(marginLeft, currentY, contentWidth, bottomHeight);
   doc.line(
-    outerLeft + leftWidth,
+    marginLeft + leftWidth,
     currentY,
-    outerLeft + leftWidth,
+    marginLeft + leftWidth,
     currentY + bottomHeight
   );
 
-  // left: Note + Bank
+  // left
   doc.setFont("times", "bold");
-  doc.text("Note :", outerLeft + 2, currentY + 5);
+  doc.text("Note :", marginLeft + 2, currentY + 5);
   doc.setFont("times", "normal");
 
   let noteY = currentY + 10;
-  notes.forEach((n, idx) => {
-    doc.text(`${idx + 1}. ${n}`, outerLeft + 5, noteY);
+  (notes || []).forEach((n, idx) => {
+    doc.text(`${idx + 1}. ${n}`, marginLeft + 5, noteY);
     noteY += 4;
   });
 
   doc.setFont("times", "bold");
-  doc.text("Bank Details :", outerLeft + 2, noteY + 2);
+  doc.text("Bank Details :", marginLeft + 2, noteY + 2);
   doc.setFont("times", "normal");
-  doc.text(bankDetails || "", outerLeft + 5, noteY + 6);
+  doc.text(bankDetails || "", marginLeft + 5, noteY + 6);
 
-  // right: For Raju Generator + signature
+  // right
   doc.setFont("times", "bold");
   const forStr = `For ${company.name || ""}`;
-  const forWidth = doc.getTextWidth(forStr);
+  const forW = doc.getTextWidth(forStr);
   doc.text(
     forStr,
-    outerLeft + leftWidth + rightWidth - forWidth - 2,
+    marginLeft + leftWidth + rightWidth - forW - 2,
     currentY + 5
   );
 
   const signName = company.signatoryName || "";
-  const signWidth = doc.getTextWidth(signName);
-
+  const signW = doc.getTextWidth(signName);
   doc.setFont("times", "normal");
   doc.text(
     signName,
-    outerLeft + leftWidth + rightWidth - signWidth - 2,
+    marginLeft + leftWidth + rightWidth - signW - 2,
     currentY + bottomHeight - 6
   );
 
+  const cap = "Authorised Signatory";
+  const capW = doc.getTextWidth(cap);
   doc.setFontSize(9);
-  const sigCaption = "Authorised Signatory";
-  const sigCaptionWidth = doc.getTextWidth(sigCaption);
   doc.text(
-    sigCaption,
-    outerLeft + leftWidth + rightWidth - sigCaptionWidth - 2,
+    cap,
+    marginLeft + leftWidth + rightWidth - capW - 2,
     currentY + bottomHeight - 2
   );
 
-  // ---------- Save ----------
-  const filename = `Invoice-${invoiceNo || "draft"}.pdf`;
-  doc.save(filename);
+  // ---------- Open PDF in new window ----------
+  try {
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank");
+    if (!win) {
+      alert("Popup blocked. Please allow popups to see the PDF.");
+    }
+  } catch (err) {
+    console.error("Error exporting PDF", err);
+    alert("Error exporting PDF: " + err.message);
+  }
 }
