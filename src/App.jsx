@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import RajaInvoice from "./RajaInvoice";
+import { exportInvoicePdf } from "./invoicePdf";
 
 // --- helper: convert number to Indian rupees in words (simple) ---
 function numberToWordsIndian(num) {
@@ -86,6 +87,10 @@ function numberToWordsIndian(num) {
 }
 
 function App() {
+  const handleExportPdf = () => {
+    exportInvoicePdf(invoice);
+  };
+  
   // today's date in dd-mm-yyyy
   const todayStr = new Date()
     .toLocaleDateString("en-GB") // dd/mm/yyyy
@@ -646,7 +651,7 @@ function App() {
           >
             {saving ? "Saving..." : "Save Invoice"}
           </button>
-          <button onClick={handlePrint}>Print / Save PDF</button>
+          <button onClick={handleExportPdf}>Export PDF (A4 Multi-page)</button>
         </div>
       </div>
 
