@@ -113,6 +113,13 @@ button:hover {
   box-sizing: border-box;
 }
 
+/* ✅ FIX: make every direct child (customer block, table, tax box, bottom box)
+   the same inner width, so borders line up perfectly */
+.invoice-wrapper > * {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* HEADER */
 .inv-header-top {
   display: flex;
@@ -186,32 +193,88 @@ button:hover {
 }
 
 .inv-field-value {
-  text-decoration: none;
+  text-decoration: none;   /* no underline for customer details */
 }
-
 /* ------------------------------------------------------------------
-   ITEMS TABLE (matches screenshot)
+   ITEMS TABLE (fixed width + wrapping description, full width)
 ------------------------------------------------------------------ */
 
 .inv-items-table {
-  width: 100%;
+  /* extend 1px beyond each side so borders line up with other boxes */
+  width: calc(100% + 2px);
+  margin-left: -1px;
+  margin-right: -1px;
+
   border-collapse: collapse;
   margin-top: 6px;
   font-size: 12px;
+  table-layout: fixed; /* fixed column widths */
 }
 
-.inv-items-table thead th {
+/* all cells keep borders and wrap text */
+.inv-items-table th,
+.inv-items-table td {
   border: 1px solid #444;
+  padding: 3px 4px;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* header styling */
+.inv-items-table thead th {
   padding: 4px 5px;
   vertical-align: middle;
   font-weight: 700;
   background: #f7f3cf; /* light cream header */
 }
 
-.inv-items-table tbody td {
-  border: 1px solid #444;
-  padding: 3px 4px;
-  vertical-align: top;
+/* Column widths in percentages – they must still sum to ~100% */
+
+.inv-items-table th:nth-child(1),
+.inv-items-table td:nth-child(1) {
+  width: 5%;   /* Sl. No. */
+}
+
+.inv-items-table th:nth-child(2),
+.inv-items-table td:nth-child(2) {
+  width: 33%;  /* DESCRIPTION OF SUPPLY */
+}
+
+.inv-items-table th:nth-child(3),
+.inv-items-table td:nth-child(3) {
+  width: 9%;   /* HSN / SAC */
+}
+
+.inv-items-table th:nth-child(4),
+.inv-items-table td:nth-child(4) {
+  width: 7%;   /* QTY. */
+}
+
+.inv-items-table th:nth-child(5),
+.inv-items-table td:nth-child(5) {
+  width: 7%;   /* UNIT */
+}
+
+.inv-items-table th:nth-child(6),
+.inv-items-table td:nth-child(6) {
+  width: 12%;  /* RATE / ITEM */
+}
+
+.inv-items-table th:nth-child(7),
+.inv-items-table td:nth-child(7) {
+  width: 9%;   /* TAX Rate */
+}
+
+.inv-items-table th:nth-child(8),
+.inv-items-table td:nth-child(8) {
+  width: 9%;   /* TAX Type */
+}
+
+.inv-items-table th:nth-child(9),
+.inv-items-table td:nth-child(9) {
+  width: 9%;   /* TAX Amount / Total etc. */
 }
 
 .align-center {
@@ -221,6 +284,9 @@ button:hover {
 .align-right {
   text-align: right;
 }
+
+
+
 
 /* bottom row: Total Taxable Value */
 .inv-items-total-row td {
@@ -310,11 +376,17 @@ button:hover {
 .inv-sign-caption {
   font-size: 11px;
 }
+
+.inv-computer-note {
+  margin-top: 4px;
+  font-size: 10px;
+  font-style: italic;
+}
+
 /* ------------------------------------------------------------------
    PRINT MODE — allow invoice to flow over multiple A4 pages
 ------------------------------------------------------------------ */
 @media print {
-  /* hide left + middle panes; only show preview (invoice) */
   .no-print {
     display: none !important;
   }
@@ -334,7 +406,7 @@ button:hover {
 
   .app-layout {
     display: block !important;
-    height: auto !important;   /* important: no 100vh in print */
+    height: auto !important;
   }
 
   .preview-pane {
@@ -351,12 +423,8 @@ button:hover {
     background: none !important;
   }
 
-  /* MAIN INVOICE BOX
-     No transform, no forced height, no page-break-after.
-     Browser can now break this over multiple pages.
-  */
   .invoice-wrapper {
-    width: 190mm;                /* fit inside A4 width */
+    width: 190mm;
     margin: 0 auto;
     box-shadow: none !important;
     background: #fffde2 !important;
@@ -364,7 +432,6 @@ button:hover {
     padding: 10px 12px;
   }
 
-  /* Make sure tables keep their borders when broken */
   table,
   th,
   td {
@@ -372,14 +439,12 @@ button:hover {
     border-collapse: collapse !important;
   }
 
-  /* Avoid breaking in ugly places, but allow break across rows */
   .inv-bottom-row,
   .inv-tax-box,
   .inv-amount-words {
     page-break-inside: avoid;
   }
 
-  /* rows can break naturally between each other */
   tr {
     page-break-inside: avoid;
   }
@@ -389,4 +454,233 @@ button:hover {
 @page {
   size: A4;
   margin: 10mm;
+}
+
+/* ---------- Form layout in App.jsx ---------- */
+.form-section-title {
+  margin-top: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 2px;
+}
+
+.form-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.form-row > span {
+  min-width: 90px;
+  font-size: 12px;
+}
+
+.form-row input,
+.form-row textarea,
+.form-row select {
+  flex: 1;
+  font-size: 12px;
+  padding: 3px 4px;
+  box-sizing: border-box;
+}
+
+/* item block in middle pane */
+.item-block {
+  border: 1px solid #ccc;
+  padding: 6px;
+  margin-bottom: 6px;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.item-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  background: #2563eb;
+  color: #fff;
+  border: 1px solid #1d4ed8;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.btn-secondary {
+  background: #e5e7eb;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.btn-secondary:hover {
+  background: #d4d4d8;
+}
+
+.btn-danger {
+  background: #f97373;
+  border: 1px solid #ef4444;
+  color: #000;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-danger:hover {
+  background: #ef4444;
+}
+
+/* ---------- Saved invoice list ---------- */
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.filter-block {
+  border: 1px solid #ddd;
+  padding: 6px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.invoice-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.invoice-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 4px;
+  padding: 4px;
+  margin-bottom: 4px;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid transparent;
+}
+.invoice-item:hover {
+  background: #e5e7eb;
+}
+.invoice-item.active {
+  border-color: #2563eb;
+  background: #dbeafe;
+}
+
+.invoice-item-main {
+  flex: 1;
+}
+
+.invoice-item-line.small {
+  font-size: 11px;
+}
+
+/* ---------- Drag handles between panes ---------- */
+.drag-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: #d4d4d8;
+}
+.drag-handle:hover {
+  background: #9ca3af;
+}
+
+@media (max-width: 900px) {
+  .drag-handle {
+    display: none;
+  }
+}
+
+.zoom-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 6px;
+  background: #fff;
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  width: max-content;
+}
+
+.zoom-controls button {
+  padding: 2px 8px;
+  font-size: 14px;
+  border: 1px solid #999;
+  background: #eee;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.zoom-controls button:hover {
+  background: #ddd;
+}
+
+/* --- Left pane header + buttons --- */
+.list-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.list-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* --- Filter block: always vertical, good on narrow widths --- */
+.filter-block {
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Only in left pane, make label over input */
+.list-pane .form-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.list-pane .form-row span {
+  font-weight: 600;
+}
+
+.list-pane .form-row input[type="date"],
+.list-pane .form-row input[type="text"],
+.list-pane .form-row input {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 6px;
+  box-sizing: border-box;
+}
+
+/* Make sure the list scrolls independently */
+.invoice-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }

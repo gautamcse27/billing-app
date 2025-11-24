@@ -1,5 +1,5 @@
 // src/App.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import RajaInvoice from "./RajaInvoice";
 import { exportInvoicePdf } from "./invoicePdf";
 
@@ -87,56 +87,105 @@ function numberToWordsIndian(num) {
   );
 }
 
+// helper: today in dd-mm-yyyy
+const getTodayStr = () =>
+  new Date().toLocaleDateString("en-GB").replace(/\//g, "-");
+
+// base meta template
+const makeDefaultMeta = () => ({
+  invoiceNo: "",
+  date: getTodayStr(),
+
+  customerName: "",
+  customerAddress: "",
+  customerGstin: "",
+  stateCode: "",
+  workOrderNo: "",
+
+  cgstRate: "9",
+  sgstRate: "9",
+  igstRate: "28",
+
+  note1: "Goods once sold will not be taken back.",
+  note2:
+    "All the disputes arising out of this invoice settled in Patna Jurisdiction.",
+  bankDetails:
+    "Bank of India, Jamal Road, Patna, A/C No. 44152010000578, IFSC - BKID0004415",
+
+  companyName: "Raju Generator",
+  companyGstin: "10AMXPP3961C1Z3",
+  companyContact: "9308054050",
+  companyDealsIn: "Generator Service, Repairing, Maintenance and Hire work.",
+  companyAddress: "Exhibition Road, Raja Market, Patna - 800 001",
+  signatoryName: "Pappu Bhardwaj",
+});
+
+// base blank item
+const blankItem = {
+  description: "",
+  hsn: "",
+  qty: "",
+  rate: "",
+  taxType: "CGST_SGST",
+  unit: "",
+};
+
 function App() {
-  // today's date in dd-mm-yyyy
-  const todayStr = new Date()
-    .toLocaleDateString("en-GB") // dd/mm/yyyy
-    .replace(/\//g, "-");
+  // -------- ZOOM FOR PREVIEW --------
+  const [zoom, setZoom] = useState(1);
+  const zoomIn = () => setZoom((z) => Math.min(2.5, z + 0.1));
+  const zoomOut = () => setZoom((z) => Math.max(0.5, z - 0.1));
+  const zoomReset = () => setZoom(1);
 
   // -------- FORM STATE --------
-  const [meta, setMeta] = useState({
-    invoiceNo: "",
-    date: todayStr,
-
-    customerName: "",
-    customerAddress: "",
-    customerGstin: "",
-    stateCode: "",
-    workOrderNo: "",
-
-    cgstRate: "9",
-    sgstRate: "9",
-    igstRate: "18",
-
-    note1: "Goods once sold will not be taken back.",
-    note2:
-      "All the disputes arising out of this invoice settled in Patna Jurisdiction.",
-    bankDetails:
-      "Bank of India, Jamal Road, Patna, A/C No. 44152010000578, IFSC - BKID0004415",
-
-    companyName: "Raju Generator",
-    companyGstin: "10AMXPP3961C1Z3",
-    companyContact: "9308054050",
-    companyDealsIn: "Generator Service, Repairing, Maintenance and Hire work.",
-    companyAddress: "Exhibition Road, Raja Market, Patna - 800 001",
-    signatoryName: "Pappu Bhardwaj",
-  });
-
-  // ITEMS – with per-item taxType and unit
-  const [items, setItems] = useState([
-    {
-      description: "",
-      hsn: "997319",
-      qty: "1",
-      rate: "40000",
-      taxType: "CGST_SGST",
-      unit: "Nos.",
-    },
-  ]);
+  const [meta, setMeta] = useState(makeDefaultMeta);
+  const [items, setItems] = useState([{ ...blankItem }]);
 
   const [invoiceList, setInvoiceList] = useState([]);
   const [currentId, setCurrentId] = useState(null);
   const [saving, setSaving] = useState(false);
+
+  // signature (company-level) — stored in localStorage so it persists
+  const [signatureDataUrl, setSignatureDataUrl] = useState(() => {
+    try {
+      return localStorage.getItem("rg_signature") || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const handleSignatureChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file (JPG).");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      setSignatureDataUrl(dataUrl);
+      try {
+        localStorage.setItem("rg_signature", dataUrl);
+      } catch {
+        // ignore if localStorage not available
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  // filters for saved list
+  const [filterDate, setFilterDate] = useState(""); // yyyy-mm-dd
+  const [filterInvoiceNo, setFilterInvoiceNo] = useState("");
+
+  // layout widths (percent) for drag-resize
+  const [layoutWidths, setLayoutWidths] = useState({
+    list: 20,
+    form: 35,
+    preview: 45,
+  });
+  const dragInfoRef = useRef(null);
 
   // -------- HANDLERS ----------
 
@@ -153,22 +202,34 @@ function App() {
     });
   };
 
+  // new item: all fields blank
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      {
-        description: "",
-        hsn: "997319",
-        qty: "1",
-        rate: "40000",
-        taxType: "CGST_SGST",
-        unit: "Nos.",
-      },
-    ]);
+    setItems((prev) => [...prev, { ...blankItem }]);
   };
 
+  // remove item with confirmation
   const removeItem = (index) => {
+    if (!window.confirm("Do you really want to remove this item row?")) return;
     setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // start a completely new invoice
+  const handleNewInvoice = () => {
+    if (
+      currentId ||
+      meta.invoiceNo ||
+      items.some(
+        (it) => it.description || it.hsn || it.qty || it.rate || it.unit
+      )
+    ) {
+      const ok = window.confirm(
+        "Clear current invoice and start a new one?"
+      );
+      if (!ok) return;
+    }
+    setCurrentId(null);
+    setMeta(makeDefaultMeta());
+    setItems([{ ...blankItem }]);
   };
 
   // -------- CALCULATIONS (per-item CGST+SGST / IGST) --------
@@ -239,6 +300,7 @@ function App() {
 
   // -------- Build invoice object for preview + saving + PDF --------
   const invoice = {
+    id: currentId || undefined,
     invoiceNo: meta.invoiceNo,
     date: meta.date,
     customerName: meta.customerName,
@@ -266,21 +328,19 @@ function App() {
       dealsIn: meta.companyDealsIn,
       address: meta.companyAddress,
       signatoryName: meta.signatoryName,
+      signatureDataUrl, // NEW: signature image for invoice + PDF
     },
   };
 
   // Export PDF (multi-page, pad style)
- // after const invoice = { ... };
-
-const handleExportPdf = () => {
-  try {
-    exportInvoicePdf(invoice);
-  } catch (err) {
-    console.error("PDF export failed", err);
-    alert("PDF export failed: " + err.message);
-  }
-};
-
+  const handleExportPdf = () => {
+    try {
+      exportInvoicePdf(invoice);
+    } catch (err) {
+      console.error("PDF export failed", err);
+      alert("PDF export failed: " + err.message);
+    }
+  };
 
   // -------- DB OPERATIONS via IPC --------
   const refreshList = async () => {
@@ -293,14 +353,24 @@ const handleExportPdf = () => {
     refreshList();
   }, []);
 
+  // create or update
   const handleSave = async () => {
     if (!window.billingAPI?.createInvoice) return;
     setSaving(true);
     try {
-      const res = await window.billingAPI.createInvoice(invoice);
-      setCurrentId(res.id);
-      await refreshList();
-      alert("Invoice saved with ID: " + res.id);
+      if (currentId && window.billingAPI.updateInvoice) {
+        await window.billingAPI.updateInvoice({
+          id: currentId,
+          invoice,
+        });
+        await refreshList();
+        alert("Invoice updated successfully.");
+      } else {
+        const res = await window.billingAPI.createInvoice(invoice);
+        setCurrentId(res.id);
+        await refreshList();
+        alert("Invoice saved successfully.");
+      }
     } catch (err) {
       console.error(err);
       alert("Error saving invoice: " + err.message);
@@ -332,151 +402,306 @@ const handleExportPdf = () => {
       igstRate: String(inv.igst_rate ?? prev.igstRate),
     }));
 
-    // old saved items don’t store taxType/unit, default them
     setItems(
       its.map((it) => ({
         description: it.description,
         hsn: it.hsn,
         qty: String(it.qty),
         rate: String(it.rate),
-        taxType: "CGST_SGST",
-        unit: it.unit || "Nos.",
+        taxType: it.tax_type || "CGST_SGST",
+        unit: it.unit || "",
       }))
     );
+  };
+
+  const handleDeleteInvoice = async (id) => {
+    if (!window.billingAPI?.deleteInvoice) {
+      alert("Delete is not configured in this build.");
+      return;
+    }
+    const ok = window.confirm(
+      "Do you really want to delete this invoice permanently?"
+    );
+    if (!ok) return;
+
+    try {
+      await window.billingAPI.deleteInvoice(id);
+      if (currentId === id) {
+        handleNewInvoice();
+      }
+      await refreshList();
+      alert("Invoice deleted successfully.");
+    } catch (err) {
+      console.error(err);
+      alert("Error deleting invoice: " + err.message);
+    }
+  };
+
+  // -------- FILTERING (date + invoice no) --------
+  const toDdMmYyyy = (iso) => {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-");
+    return `${d}-${m}-${y}`;
+  };
+
+  const filteredInvoices = invoiceList.filter((inv) => {
+    if (filterInvoiceNo.trim()) {
+      if (
+        !inv.invoice_no
+          ?.toLowerCase()
+          .includes(filterInvoiceNo.trim().toLowerCase())
+      ) {
+        return false;
+      }
+    }
+
+    if (filterDate) {
+      const needle = toDdMmYyyy(filterDate);
+      if (inv.date !== needle) return false;
+    }
+
+    return true;
+  });
+
+  // -------- DRAG-RESIZE HANDLES --------
+  const startDrag = (e, handle) => {
+    const container = document.querySelector(".app-layout");
+    const totalWidth = container?.clientWidth || window.innerWidth;
+
+    dragInfoRef.current = {
+      handle,
+      startX: e.clientX,
+      totalWidth,
+      startWidths: { ...layoutWidths },
+    };
+
+    window.addEventListener("mousemove", onDrag);
+    window.addEventListener("mouseup", stopDrag);
+  };
+
+  const onDrag = (e) => {
+    const info = dragInfoRef.current;
+    if (!info) return;
+
+    const deltaX = e.clientX - info.startX;
+    const deltaPercent = (deltaX / info.totalWidth) * 100;
+
+    let { list, form, preview } = info.startWidths;
+
+    if (info.handle === "list") {
+      let newList = Math.min(35, Math.max(10, list + deltaPercent));
+      let diff = newList - list;
+      let newForm = Math.max(20, form - diff);
+      setLayoutWidths({
+        list: newList,
+        form: newForm,
+        preview,
+      });
+    } else if (info.handle === "form") {
+      let newForm = Math.min(55, Math.max(20, form + deltaPercent));
+      let diff = newForm - form;
+      let newPreview = Math.max(25, preview - diff);
+      setLayoutWidths({
+        list,
+        form: newForm,
+        preview: newPreview,
+      });
+    }
+  };
+
+  const stopDrag = () => {
+    dragInfoRef.current = null;
+    window.removeEventListener("mousemove", onDrag);
+    window.removeEventListener("mouseup", stopDrag);
   };
 
   // -------- RENDER --------
   return (
     <div className="app-layout">
       {/* LEFT SIDEBAR: OLD INVOICES */}
-      <div className="list-pane no-print">
-        <h3>Saved Invoices</h3>
-        <button
-          style={{ fontSize: "12px", marginBottom: "8px" }}
-          onClick={refreshList}
-        >
-          Reload List
-        </button>
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {invoiceList.map((invRow) => (
+      <div
+        className="list-pane no-print"
+        style={{ width: `${layoutWidths.list}%` }}
+      >
+        <div className="list-header">
+          <h3>Saved Invoices</h3>
+          <button
+            className="btn-secondary"
+            style={{ marginRight: "4px" }}
+            onClick={refreshList}
+          >
+            Reload
+          </button>
+          <button className="btn-primary" onClick={handleNewInvoice}>
+            + New Invoice
+          </button>
+        </div>
+
+        <div className="filter-block">
+          <div className="form-row">
+            <span>Filter by Date:</span>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+            />
+          </div>
+          <div className="form-row">
+            <span>Invoice No:</span>
+            <input
+              value={filterInvoiceNo}
+              onChange={(e) => setFilterInvoiceNo(e.target.value)}
+              placeholder="Search..."
+            />
+          </div>
+        </div>
+
+        <ul className="invoice-list">
+          {filteredInvoices.map((invRow) => (
             <li
               key={invRow.id}
-              onClick={() => handleLoadInvoice(invRow.id)}
-              style={{
-                padding: "4px",
-                marginBottom: "4px",
-                cursor: "pointer",
-                background:
-                  invRow.id === currentId ? "rgba(0,0,0,0.1)" : "transparent",
-                borderRadius: "4px",
-              }}
+              className={
+                invRow.id === currentId ? "invoice-item active" : "invoice-item"
+              }
             >
-              <div>
-                <strong>{invRow.invoice_no}</strong>
+              <div
+                className="invoice-item-main"
+                onClick={() => handleLoadInvoice(invRow.id)}
+              >
+                <div className="invoice-item-line">
+                  <strong>{invRow.invoice_no}</strong>
+                </div>
+                <div className="invoice-item-line small">
+                  {invRow.date} – {invRow.customer_name}
+                </div>
+                <div className="invoice-item-line small">
+                  Total: {invRow.grand_total?.toLocaleString("en-IN")}
+                </div>
               </div>
-              <div>{invRow.customer_name}</div>
-              <div>₹ {invRow.grand_total?.toLocaleString("en-IN")}</div>
+              <button
+                className="btn-danger"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteInvoice(invRow.id);
+                }}
+              >
+                ✕
+              </button>
             </li>
           ))}
         </ul>
       </div>
 
+      {/* drag handle between list and form */}
+      <div
+        className="drag-handle no-print"
+        onMouseDown={(e) => startDrag(e, "list")}
+      />
+
       {/* MIDDLE: ENTRY FORM */}
-      <div className="form-pane no-print">
+      <div
+        className="form-pane no-print"
+        style={{ width: `${layoutWidths.form}%` }}
+      >
         <h2>Bill Entry (Manual)</h2>
 
-        <h3>Invoice Details</h3>
-        <label>
-          Invoice No:
+        <h3 className="form-section-title">Invoice Details</h3>
+        <div className="form-row">
+          <span>Invoice No:</span>
           <input
             name="invoiceNo"
             value={meta.invoiceNo}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Date:
+        </div>
+        <div className="form-row">
+          <span>Date:</span>
           <input
             name="date"
             value={meta.date}
             onChange={handleMetaChange}
+            placeholder="dd-mm-yyyy"
           />
-        </label>
+        </div>
 
-        <h3>Customer</h3>
-        <label>
-          Name:
+        <h3 className="form-section-title">Customer</h3>
+        <div className="form-row">
+          <span>Name:</span>
           <input
             name="customerName"
             value={meta.customerName}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Address:
+        </div>
+        <div className="form-row">
+          <span>Address:</span>
           <textarea
             name="customerAddress"
             value={meta.customerAddress}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          GSTIN:
+        </div>
+        <div className="form-row">
+          <span>GSTIN:</span>
           <input
             name="customerGstin"
             value={meta.customerGstin}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          State Code:
+        </div>
+        <div className="form-row">
+          <span>State Code:</span>
           <input
             name="stateCode"
             value={meta.stateCode}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Work Order No.:
+        </div>
+        <div className="form-row">
+          <span>Work Order No.:</span>
           <input
             name="workOrderNo"
             value={meta.workOrderNo}
             onChange={handleMetaChange}
           />
-        </label>
+        </div>
 
-        <h3>Items</h3>
+        <h3 className="form-section-title">Items</h3>
         {items.map((it, idx) => (
-          <div
-            key={idx}
-            style={{
-              border: "1px solid #ccc",
-              padding: "6px",
-              marginBottom: "6px",
-              borderRadius: "4px",
-            }}
-          >
-            <div>Sl. No.: {idx + 1}</div>
-            <label>
-              Description:
+          <div key={idx} className="item-block">
+            <div className="item-block-header">
+              <span>Item #{idx + 1}</span>
+              {items.length > 1 && (
+                <button
+                  type="button"
+                  className="btn-danger"
+                  onClick={() => removeItem(idx)}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+
+            <div className="form-row">
+              <span>Description:</span>
               <textarea
                 value={it.description}
                 onChange={(e) =>
                   handleItemChange(idx, "description", e.target.value)
                 }
               />
-            </label>
-            <label>
-              HSN/SAC:
+            </div>
+            <div className="form-row">
+              <span>HSN/SAC:</span>
               <input
                 value={it.hsn}
                 onChange={(e) =>
                   handleItemChange(idx, "hsn", e.target.value)
                 }
               />
-            </label>
-            <label>
-              Qty:
+            </div>
+            <div className="form-row">
+              <span>Qty:</span>
               <input
                 type="number"
                 value={it.qty}
@@ -484,16 +709,16 @@ const handleExportPdf = () => {
                   handleItemChange(idx, "qty", e.target.value)
                 }
               />
-            </label>
-            <label>
-              Unit:
+            </div>
+            <div className="form-row">
+              <span>Unit:</span>
               <input
                 value={it.unit || ""}
                 onChange={(e) => handleItemChange(idx, "unit", e.target.value)}
               />
-            </label>
-            <label>
-              Rate:
+            </div>
+            <div className="form-row">
+              <span>Rate:</span>
               <input
                 type="number"
                 value={it.rate}
@@ -501,10 +726,9 @@ const handleExportPdf = () => {
                   handleItemChange(idx, "rate", e.target.value)
                 }
               />
-            </label>
-
-            <label>
-              Tax Type:
+            </div>
+            <div className="form-row">
+              <span>Tax Type:</span>
               <select
                 value={it.taxType || "CGST_SGST"}
                 onChange={(e) =>
@@ -514,153 +738,242 @@ const handleExportPdf = () => {
                 <option value="CGST_SGST">CGST + SGST</option>
                 <option value="IGST">IGST only</option>
               </select>
-            </label>
-
-            <div>
-              Amount (Taxable):{" "}
-              {(
-                (Number(it.qty || 0) * Number(it.rate || 0)) ||
-                0
-              ).toLocaleString("en-IN")}
             </div>
-            {items.length > 1 && (
-              <button
-                type="button"
-                style={{ marginTop: "4px", fontSize: "11px" }}
-                onClick={() => removeItem(idx)}
-              >
-                Remove Item
-              </button>
-            )}
+
+            <div className="form-row">
+              <span>Amount (Taxable):</span>
+              <input
+                disabled
+                value={(
+                  (Number(it.qty || 0) * Number(it.rate || 0)) || 0
+                ).toLocaleString("en-IN")}
+              />
+            </div>
           </div>
         ))}
-        <button type="button" onClick={addItem} style={{ fontSize: "12px" }}>
+        <button type="button" onClick={addItem} className="btn-secondary">
           + Add Item
         </button>
 
-        <h3>Tax</h3>
-        <label>
-          CGST %:
+        <h3 className="form-section-title">Tax</h3>
+        <div className="form-row">
+          <span>CGST %:</span>
           <input
             name="cgstRate"
             type="number"
             value={meta.cgstRate}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          SGST %:
+        </div>
+        <div className="form-row">
+          <span>SGST %:</span>
           <input
             name="sgstRate"
             type="number"
             value={meta.sgstRate}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          IGST %:
+        </div>
+        <div className="form-row">
+          <span>IGST %:</span>
           <input
             name="igstRate"
             type="number"
             value={meta.igstRate}
             onChange={handleMetaChange}
           />
-        </label>
-
-        <h3>Totals</h3>
-        <div>Taxable: ₹ {computed.taxableAmount.toLocaleString("en-IN")}</div>
-        <div>CGST: ₹ {computed.cgstAmount.toLocaleString("en-IN")}</div>
-        <div>SGST: ₹ {computed.sgstAmount.toLocaleString("en-IN")}</div>
-        <div>IGST: ₹ {computed.igstAmount.toLocaleString("en-IN")}</div>
-        <div>
-          <strong>
-            Grand Total: ₹ {computed.grandTotal.toLocaleString("en-IN")}
-          </strong>
         </div>
-        <div>In words: {computed.amountInWords}</div>
 
-        <h3>Notes & Bank</h3>
-        <textarea
-          name="note1"
-          value={meta.note1}
-          onChange={handleMetaChange}
-        />
-        <textarea
-          name="note2"
-          value={meta.note2}
-          onChange={handleMetaChange}
-        />
-        <textarea
-          name="bankDetails"
-          value={meta.bankDetails}
-          onChange={handleMetaChange}
-        />
+        <h3 className="form-section-title">Totals</h3>
+        <div className="form-row">
+          <span>Taxable:</span>
+          <input
+            disabled
+            value={computed.taxableAmount.toLocaleString("en-IN")}
+          />
+        </div>
+        <div className="form-row">
+          <span>CGST:</span>
+          <input
+            disabled
+            value={computed.cgstAmount.toLocaleString("en-IN")}
+          />
+        </div>
+        <div className="form-row">
+          <span>SGST:</span>
+          <input
+            disabled
+            value={computed.sgstAmount.toLocaleString("en-IN")}
+          />
+        </div>
+        <div className="form-row">
+          <span>IGST:</span>
+          <input
+            disabled
+            value={computed.igstAmount.toLocaleString("en-IN")}
+          />
+        </div>
+        <div className="form-row">
+          <span>Grand Total:</span>
+          <input
+            disabled
+            value={computed.grandTotal.toLocaleString("en-IN")}
+          />
+        </div>
+        <div className="form-row">
+          <span>In words:</span>
+          <textarea disabled value={computed.amountInWords} />
+        </div>
 
-        <h3>Company</h3>
-        <label>
-          Firm Name:
+        <h3 className="form-section-title">Notes & Bank</h3>
+        <div className="form-row">
+          <span>Note 1:</span>
+          <textarea
+            name="note1"
+            value={meta.note1}
+            onChange={handleMetaChange}
+          />
+        </div>
+        <div className="form-row">
+          <span>Note 2:</span>
+          <textarea
+            name="note2"
+            value={meta.note2}
+            onChange={handleMetaChange}
+          />
+        </div>
+        <div className="form-row">
+          <span>Bank Details:</span>
+          <textarea
+            name="bankDetails"
+            value={meta.bankDetails}
+            onChange={handleMetaChange}
+          />
+        </div>
+
+        <h3 className="form-section-title">Company</h3>
+        <div className="form-row">
+          <span>Firm Name:</span>
           <input
             name="companyName"
             value={meta.companyName}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Firm GSTIN:
+        </div>
+        <div className="form-row">
+          <span>Firm GSTIN:</span>
           <input
             name="companyGstin"
             value={meta.companyGstin}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Contact No.:
+        </div>
+        <div className="form-row">
+          <span>Contact No.:</span>
           <input
             name="companyContact"
             value={meta.companyContact}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Deals In:
+        </div>
+        <div className="form-row">
+          <span>Deals In:</span>
           <textarea
             name="companyDealsIn"
             value={meta.companyDealsIn}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Address:
+        </div>
+        <div className="form-row">
+          <span>Address:</span>
           <textarea
             name="companyAddress"
             value={meta.companyAddress}
             onChange={handleMetaChange}
           />
-        </label>
-        <label>
-          Signatory:
+        </div>
+        <div className="form-row">
+          <span>Signatory (name, optional):</span>
           <input
             name="signatoryName"
             value={meta.signatoryName}
             onChange={handleMetaChange}
           />
-        </label>
+        </div>
+        <div className="form-row">
+          <span>Signature (JPG):</span>
+          <input
+            type="file"
+            accept="image/jpeg,image/jpg"
+            onChange={handleSignatureChange}
+          />
+        </div>
 
-        <div style={{ marginTop: "10px" }}>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            style={{ marginRight: "8px" }}
-          >
-            {saving ? "Saving..." : "Save Invoice"}
+        <div style={{ marginTop: "10px", display: "flex", gap: "8px" }}>
+          <button onClick={handleSave} disabled={saving} className="btn-primary">
+            {saving
+              ? "Saving..."
+              : currentId
+              ? "Update Invoice"
+              : "Save Invoice"}
           </button>
-          <button onClick={handleExportPdf}>Export PDF (A4 Multi-page)</button>
+          <button onClick={handleExportPdf} className="btn-secondary">
+            Export PDF (A4 Multi-page)
+          </button>
         </div>
       </div>
 
-      {/* RIGHT: INVOICE PREVIEW */}
-      <div className="preview-pane">
-        <RajaInvoice invoice={invoice} />
+      {/* drag handle between form and preview */}
+      <div
+        className="drag-handle no-print"
+        onMouseDown={(e) => startDrag(e, "form")}
+      />
+
+      {/* RIGHT: INVOICE PREVIEW with ZOOM */}
+      <div
+        className="preview-pane"
+        style={{ width: `${layoutWidths.preview}%` }}
+      >
+        <div
+          className="preview-toolbar"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>Invoice Preview</span>
+          <div
+            className="zoom-controls"
+            style={{ display: "flex", gap: 4, alignItems: "center" }}
+          >
+            <button onClick={zoomOut}>-</button>
+            <span>{Math.round(zoom * 100)}%</span>
+            <button onClick={zoomIn}>+</button>
+            <button onClick={zoomReset}>Reset</button>
+          </div>
+        </div>
+
+        <div
+          className="preview-zoom-wrapper"
+          style={{
+            overflow: "auto",
+            border: "1px solid #ccc",
+            padding: 4,
+            background: "#dcdcdc",
+          }}
+        >
+          <div
+            style={{
+              transform: `scale(${zoom})`,
+              transformOrigin: "top left",
+              width: `${100 / zoom}%`,
+            }}
+          >
+            <RajaInvoice invoice={invoice} />
+          </div>
+        </div>
       </div>
     </div>
   );

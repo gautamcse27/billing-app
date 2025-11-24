@@ -39,6 +39,8 @@ export function exportInvoicePdf(invoice) {
     company,
   } = invoice;
 
+  const signatureDataUrl = company?.signatureDataUrl;
+
   // ---------- HEADER ----------
   let y = 12;
 
@@ -129,9 +131,12 @@ export function exportInvoicePdf(invoice) {
       "HSN / SAC",
       "QTY.",
       "UNIT",
-      "RATE / ITEM (₹)",
-      "TAX %",
-      "TAXABLE VALUE (₹)",
+      "RATE / ITEM",
+      "TAX Rate",
+      "TAX Type",
+      "TAXABLE VALUE",
+      "TAX Amount",
+      "TOTAL Amount",
     ],
   ];
 
@@ -142,13 +147,15 @@ export function exportInvoicePdf(invoice) {
     const unit = it.unit || "";
     const taxType = it.taxType || "CGST_SGST";
 
-    let taxPercentStr = "";
+    let taxRate = 0;
     if (taxType === "IGST") {
-      taxPercentStr = igstRate ? `${igstRate}%` : "";
+      taxRate = Number(igstRate || 0);
     } else {
-      const totalPct = Number(cgstRate || 0) + Number(sgstRate || 0);
-      taxPercentStr = totalPct ? `${totalPct}%` : "";
+      taxRate = Number(cgstRate || 0) + Number(sgstRate || 0);
     }
+
+    const taxAmount = (amount * taxRate) / 100;
+    const totalAmount = amount + taxAmount;
 
     return [
       String(index + 1),
@@ -157,8 +164,11 @@ export function exportInvoicePdf(invoice) {
       qty ? String(qty) : "",
       unit,
       rate ? rate.toLocaleString("en-IN") : "",
-      taxPercentStr,
+      taxRate ? `${taxRate}%` : "",
+      taxType === "IGST" ? "IGST" : "CGST + SGST",
       amount ? amount.toLocaleString("en-IN") : "",
+      taxAmount ? taxAmount.toLocaleString("en-IN") : "",
+      totalAmount ? totalAmount.toLocaleString("en-IN") : "",
     ];
   });
 
@@ -177,15 +187,20 @@ export function exportInvoicePdf(invoice) {
       textColor: 0,
       halign: "center",
     },
+    // make table exactly as wide as content box
+    margin: { left: marginLeft, right: marginRight },
+    tableWidth: contentWidth,
     columnStyles: {
-      0: { cellWidth: 10 },
-      1: { cellWidth: 60 },
-      2: { cellWidth: 18 },
-      3: { cellWidth: 12, halign: "center" },
-      4: { cellWidth: 12, halign: "center" },
-      5: { cellWidth: 24, halign: "right" },
-      6: { cellWidth: 14, halign: "center" },
-      7: { cellWidth: 24, halign: "right" },
+      0: { halign: "center" }, // Sl. No.
+      2: { halign: "center" }, // HSN/SAC
+      3: { halign: "center" }, // QTY.
+      4: { halign: "center" }, // UNIT
+      5: { halign: "right" },  // Rate
+      6: { halign: "center" }, // Tax Rate
+      7: { halign: "center" }, // Tax Type
+      8: { halign: "right" },  // Taxable
+      9: { halign: "right" },  // Tax Amount
+      10: { halign: "right" }, // Total Amount
     },
   });
 
@@ -286,14 +301,28 @@ export function exportInvoicePdf(invoice) {
     currentY + 5
   );
 
-  const signName = company.signatoryName || "";
-  const signW = doc.getTextWidth(signName);
-  doc.setFont("times", "normal");
-  doc.text(
-    signName,
-    marginLeft + leftWidth + rightWidth - signW - 2,
-    currentY + bottomHeight - 6
-  );
+  // signature image (if any)
+  if (signatureDataUrl) {
+    try {
+      const imgWidth = 30;
+      const imgHeight = 12;
+      const imgX = marginLeft + leftWidth + rightWidth - imgWidth - 4;
+      const imgY = currentY + bottomHeight - imgHeight - 8;
+      doc.addImage(signatureDataUrl, "JPEG", imgX, imgY, imgWidth, imgHeight);
+    } catch (e) {
+      console.error("Error adding signature image", e);
+    }
+  } else if (company.signatoryName) {
+    // fallback to text name
+    const signName = company.signatoryName || "";
+    const signW = doc.getTextWidth(signName);
+    doc.setFont("times", "normal");
+    doc.text(
+      signName,
+      marginLeft + leftWidth + rightWidth - signW - 2,
+      currentY + bottomHeight - 6
+    );
+  }
 
   const cap = "Authorised Signatory";
   const capW = doc.getTextWidth(cap);

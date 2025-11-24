@@ -26,6 +26,8 @@ const RajaInvoice = ({ invoice }) => {
     company,
   } = invoice;
 
+  const signatureDataUrl = company.signatureDataUrl;
+
   return (
     <div className="invoice-page">
       <div className="invoice-wrapper">
@@ -85,28 +87,38 @@ const RajaInvoice = ({ invoice }) => {
         <table className="inv-items-table">
           <thead>
             <tr>
-              <th style={{ width: "5%" }}>Sl. No.</th>
-              <th style={{ width: "38%" }}>DESCRIPTION OF SUPPLY</th>
-              <th style={{ width: "9%" }}>HSN / SAC</th>
-              <th style={{ width: "7%" }}>QTY.</th>
-              <th style={{ width: "7%" }}>UNIT</th>
-              <th style={{ width: "12%" }}>RATE / ITEM (₹)</th>
-              <th style={{ width: "7%" }}>TAX %</th>
-              <th style={{ width: "15%" }}>TAXABLE VALUE (₹)</th>
+              <th>Sl. No.</th>
+              <th>DESCRIPTION OF SUPPLY</th>
+              <th>HSN / SAC</th>
+              <th>QTY.</th>
+              <th>UNIT</th>
+              <th>RATE / ITEM</th>
+              <th>TAX Rate</th>
+              <th>TAX Type</th>
+              <th>TAXABLE VALUE</th>
+              <th>TAX Amount</th>
+              <th>TOTAL Amount</th>
             </tr>
           </thead>
           <tbody>
             {items.map((it, idx) => {
               const taxType = it.taxType || "CGST_SGST";
-              const effectiveRate =
-                taxType === "IGST"
-                  ? igstRate
-                  : (cgstRate || 0) + (sgstRate || 0); // total % for CGST+SGST
+              const baseAmount = Number(it.amount || 0);
+
+              let taxRate = 0;
+              if (taxType === "IGST") {
+                taxRate = Number(igstRate || 0);
+              } else {
+                taxRate = Number(cgstRate || 0) + Number(sgstRate || 0);
+              }
+
+              const taxAmount = (baseAmount * taxRate) / 100;
+              const totalAmount = baseAmount + taxAmount;
 
               return (
                 <tr key={idx}>
                   <td className="align-center">{idx + 1}</td>
-                  <td>{it.description}</td>
+                  <td className="desc-cell">{it.description}</td>
                   <td className="align-center">{it.hsn}</td>
                   <td className="align-center">{it.qty}</td>
                   <td className="align-center">{it.unit || ""}</td>
@@ -114,10 +126,19 @@ const RajaInvoice = ({ invoice }) => {
                     {Number(it.rate || 0).toLocaleString("en-IN")}
                   </td>
                   <td className="align-center">
-                    {effectiveRate ? `${effectiveRate}%` : ""}
+                    {taxRate ? `${taxRate}%` : ""}
+                  </td>
+                  <td className="align-center">
+                    {taxType === "IGST" ? "IGST" : "CGST + SGST"}
                   </td>
                   <td className="align-right">
-                    {Number(it.amount || 0).toLocaleString("en-IN")}
+                    {baseAmount.toLocaleString("en-IN")}
+                  </td>
+                  <td className="align-right">
+                    {taxAmount.toLocaleString("en-IN")}
+                  </td>
+                  <td className="align-right">
+                    {totalAmount.toLocaleString("en-IN")}
                   </td>
                 </tr>
               );
@@ -125,12 +146,13 @@ const RajaInvoice = ({ invoice }) => {
 
             {/* Total taxable value row */}
             <tr className="inv-items-total-row">
-              <td colSpan={7} className="align-right">
+              <td colSpan={8} className="align-right">
                 <strong>Total Taxable Value</strong>
               </td>
               <td className="align-right">
                 <strong>{taxableAmount.toLocaleString("en-IN")}</strong>
               </td>
+              <td colSpan={2}></td>
             </tr>
           </tbody>
         </table>
@@ -198,10 +220,32 @@ const RajaInvoice = ({ invoice }) => {
 
           <div className="inv-bottom-right">
             <div className="inv-for-label">For {company.name}</div>
-            <div className="inv-sign-space" />
-            <div className="inv-sign-name">{company.signatoryName}</div>
+
+            <div className="inv-sign-space">
+              {signatureDataUrl && (
+                <img
+                  src={signatureDataUrl}
+                  alt="Authorised signatory"
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "40px",
+                    objectFit: "contain",
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Fallback text name only if no signature image */}
+            {!signatureDataUrl && company.signatoryName && (
+              <div className="inv-sign-name">{company.signatoryName}</div>
+            )}
             <div className="inv-sign-caption">Authorised Signatory</div>
           </div>
+        </div>
+
+        <div className="inv-computer-note">
+          This is a computer generated invoice and does not require a
+          signature.
         </div>
       </div>
     </div>
